@@ -1,4 +1,5 @@
 mod cli;
+mod payment_engine;
 
 use std::fs::File;
 
@@ -9,6 +10,7 @@ use serde::Deserialize;
 use tracing::error;
 
 use crate::cli::Cli;
+use crate::payment_engine::{PaymentEngine, Transaction, TransactionType};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const GIT_HASH: &str = match option_env!("GIT_HASH") {
@@ -24,11 +26,21 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    let mut payment_engine = PaymentEngine::new();
 
     let file = File::open(cli.transactions_file)?;
     let mut reader = Reader::from_reader(file);
     let records = reader.deserialize::<CsvTransaction>();
     for transaction in records {
+        let transaction = transaction?.try_into()?;
+
+        if let Err(err) = payment_engine.process_transaction(&transaction) {
+            error!(
+                transaction_id = transaction.transaction_id,
+                ?err,
+                "transaction processing failed"
+            );
+        }
     }
 
     Ok(())
