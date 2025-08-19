@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 use rust_decimal::Decimal;
 use thiserror::Error;
-use tracing::warn;
 pub use transaction::Transaction;
 pub use transaction::TransactionType;
 
@@ -51,25 +50,12 @@ impl PaymentEngine {
                     ));
                 }
 
-                let res = client.withdraw(amount);
-
-                if !matches!(res, Err(PaymentEngineError::InsufficientFunds)) {
-                    res?;
-                } else {
-                    warn!(
-                        transaction_id = transaction.id,
-                        "insufficient funds for withdrawal"
-                    );
-                    return Ok(());
-                }
-
+                client.withdraw(amount)?;
                 self.transactions.insert(transaction.id, transaction);
             }
             TransactionType::Dispute | TransactionType::Resolve | TransactionType::Chargeback => {
                 let Some(original_transaction) = self.transactions.get_mut(&transaction.id) else {
-                    // Probably an error on our partner's side
-                    warn!(transaction_id = transaction.id, "transaction not found");
-                    return Ok(());
+                    return Err(PaymentEngineError::TransactionNotFound(transaction.id));
                 };
 
                 if original_transaction.client != transaction.client {
@@ -99,11 +85,7 @@ impl PaymentEngine {
                     }
                     TransactionType::Resolve => {
                         if !original_transaction.is_disputed {
-                            warn!(
-                                transaction_id = transaction.id,
-                                "transaction was not disputed"
-                            );
-                            return Ok(());
+                            return Err(PaymentEngineError::NotDisputed(transaction.id));
                         }
 
                         original_transaction.is_disputed = false;
@@ -111,11 +93,7 @@ impl PaymentEngine {
                     }
                     TransactionType::Chargeback => {
                         if !original_transaction.is_disputed {
-                            warn!(
-                                transaction_id = transaction.id,
-                                "transaction was not disputed"
-                            );
-                            return Ok(());
+                            return Err(PaymentEngineError::NotDisputed(transaction.id));
                         }
 
                         original_transaction.is_disputed = false;
@@ -146,8 +124,12 @@ pub enum PaymentEngineError {
     InvalidTransactionType(String),
     #[error("invalid transaction amount: {0} - {1}")]
     InvalidAmount(Decimal, String),
+    #[error("transaction (id={0}) not found")]
+    TransactionNotFound(u32),
     #[error("transaction (id={0}) is already disputed")]
     TransactionAlreadyDisputed(u32),
+    #[error("transaction (id={0}) was not disputed")]
+    NotDisputed(u32),
     #[error("dispute operations can only be applied to the same client account")]
     DisputeForDifferentClient,
 }
@@ -249,7 +231,7 @@ mod tests {
 
         engine.process_transaction(deposit).unwrap();
         let result = engine.process_transaction(withdrawal);
-        assert!(matches!(result, Ok(())));
+        assert!(matches!(result, Err(PaymentEngineError::InsufficientFunds)));
         let account = engine
             .get_accounts_statuses()
             .into_iter()
@@ -404,7 +386,10 @@ mod tests {
         let dispute = Transaction::new(1, 99, TransactionType::Dispute);
 
         let result = engine.process_transaction(dispute);
-        assert!(matches!(result, Ok(())));
+        assert!(matches!(
+            result,
+            Err(PaymentEngineError::TransactionNotFound(99))
+        ));
         let Some(account) = engine
             .get_accounts_statuses()
             .into_iter()

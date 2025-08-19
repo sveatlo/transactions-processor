@@ -9,7 +9,7 @@ use clap::Parser;
 use csv::{Reader, WriterBuilder};
 use rust_decimal::Decimal;
 use serde::Deserialize;
-use tracing::error;
+use tracing::warn;
 
 use crate::cli::Cli;
 use crate::payment_engine::{PaymentEngine, Transaction, TransactionType};
@@ -39,7 +39,7 @@ fn main() -> Result<()> {
         let transaction_id = transaction.id;
 
         if let Err(err) = payment_engine.process_transaction(transaction) {
-            error!(transaction_id, ?err, "transaction processing failed");
+            warn!(transaction_id, ?err, "transaction processing failed");
         }
     }
 
