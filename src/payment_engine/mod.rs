@@ -129,6 +129,10 @@ impl PaymentEngine {
 
         Ok(())
     }
+
+    pub fn get_accounts_statuses(&self) -> Vec<AccountStatus> {
+        self.clients.values().cloned().collect()
+    }
 }
 
 #[derive(Error, Debug)]

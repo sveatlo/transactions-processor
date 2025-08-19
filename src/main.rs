@@ -2,10 +2,11 @@ mod cli;
 mod payment_engine;
 
 use std::fs::File;
+use std::io;
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use csv::Reader;
+use csv::{Reader, WriterBuilder};
 use serde::Deserialize;
 use tracing::error;
 
@@ -38,6 +39,13 @@ fn main() -> Result<()> {
         if let Err(err) = payment_engine.process_transaction(transaction) {
             error!(transaction_id, ?err, "transaction processing failed");
         }
+    }
+
+    let accounts = payment_engine.get_accounts_statuses();
+
+    let mut writer = WriterBuilder::new().from_writer(io::stdout());
+    for account in accounts {
+        writer.serialize(&account)?;
     }
 
     Ok(())
