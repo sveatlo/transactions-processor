@@ -7,6 +7,7 @@ use std::io;
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use csv::{Reader, WriterBuilder};
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use tracing::error;
 
@@ -57,7 +58,7 @@ pub struct CsvTransaction {
     pub transaction_type: CsvTransactionType,
     pub client: u16,
     pub tx: u32,
-    pub amount: Option<f64>,
+    pub amount: Option<Decimal>,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -98,6 +99,7 @@ impl TryFrom<CsvTransaction> for Transaction {
 mod tests {
     use super::*;
     use csv::ReaderBuilder;
+    use rust_decimal::dec;
 
     #[test]
     fn test_deserialize_deposit() {
@@ -111,7 +113,7 @@ mod tests {
         assert_eq!(tx.transaction_type, CsvTransactionType::Deposit);
         assert_eq!(tx.client, 1);
         assert_eq!(tx.tx, 1001);
-        assert_eq!(tx.amount, Some(42.5));
+        assert_eq!(tx.amount, Some(dec!(42.5)));
     }
 
     #[test]
@@ -126,7 +128,7 @@ mod tests {
         assert_eq!(tx.transaction_type, CsvTransactionType::Withdrawal);
         assert_eq!(tx.client, 2);
         assert_eq!(tx.tx, 1002);
-        assert_eq!(tx.amount, Some(10.0));
+        assert_eq!(tx.amount, Some(dec!(10.0)));
     }
 
     #[test]

@@ -3,6 +3,7 @@ mod transaction;
 
 use std::collections::HashMap;
 
+use rust_decimal::Decimal;
 use thiserror::Error;
 use tracing::warn;
 pub use transaction::Transaction;
@@ -32,7 +33,7 @@ impl PaymentEngine {
 
         match transaction.r#type {
             TransactionType::Deposit { amount } => {
-                if amount < 0.0 {
+                if amount < Decimal::ZERO {
                     return Err(PaymentEngineError::InvalidAmount(
                         amount,
                         "deposit amount cannot be negative".to_string(),
@@ -43,7 +44,7 @@ impl PaymentEngine {
                 self.transactions.insert(transaction.id, transaction);
             }
             TransactionType::Withdrawal { amount } => {
-                if amount < 0.0 {
+                if amount < Decimal::ZERO {
                     return Err(PaymentEngineError::InvalidAmount(
                         amount,
                         "withdrawal amount cannot be negative".to_string(),
@@ -144,7 +145,7 @@ pub enum PaymentEngineError {
     #[error("invalid transaction type: {0}")]
     InvalidTransactionType(String),
     #[error("invalid transaction amount: {0} - {1}")]
-    InvalidAmount(f64, String),
+    InvalidAmount(Decimal, String),
     #[error("transaction (id={0}) is already disputed")]
     TransactionAlreadyDisputed(u32),
     #[error("dispute operations can only be applied to the same client account")]
@@ -153,14 +154,22 @@ pub enum PaymentEngineError {
 
 #[cfg(test)]
 mod tests {
+    use rust_decimal::dec;
+
     use super::*;
     use crate::payment_engine::TransactionType;
 
     #[test]
     fn test_deposit_and_withdrawal() {
         let mut engine = PaymentEngine::new();
-        let deposit = Transaction::new(1, 1, TransactionType::Deposit { amount: 100.0 });
-        let withdrawal = Transaction::new(1, 2, TransactionType::Withdrawal { amount: 40.0 });
+        let deposit = Transaction::new(
+            1,
+            1,
+            TransactionType::Deposit {
+                amount: dec!(100.0),
+            },
+        );
+        let withdrawal = Transaction::new(1, 2, TransactionType::Withdrawal { amount: dec!(40.0) });
 
         engine.process_transaction(deposit).unwrap();
         engine.process_transaction(withdrawal).unwrap();
@@ -170,16 +179,22 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 60.0);
-        assert_eq!(account.held, 0.0);
-        assert_eq!(account.total, 60.0);
+        assert_eq!(account.available, dec!(60.0));
+        assert_eq!(account.held, dec!(0.0));
+        assert_eq!(account.total, dec!(60.0));
         assert!(!account.locked);
     }
 
     #[test]
     fn test_dispute_resolve_chargeback() {
         let mut engine = PaymentEngine::new();
-        let deposit = Transaction::new(1, 1, TransactionType::Deposit { amount: 100.0 });
+        let deposit = Transaction::new(
+            1,
+            1,
+            TransactionType::Deposit {
+                amount: dec!(100.0),
+            },
+        );
         let dispute = Transaction::new(1, 1, TransactionType::Dispute);
         let resolve = Transaction::new(1, 1, TransactionType::Resolve);
         let chargeback = Transaction::new(1, 1, TransactionType::Chargeback);
@@ -193,8 +208,8 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 0.0);
-        assert_eq!(account.held, 100.0);
+        assert_eq!(account.available, dec!(0.0));
+        assert_eq!(account.held, dec!(100.0));
 
         // Resolve
         engine.process_transaction(resolve).unwrap();
@@ -203,8 +218,8 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 100.0);
-        assert_eq!(account.held, 0.0);
+        assert_eq!(account.available, dec!(100.0));
+        assert_eq!(account.held, dec!(0.0));
 
         // Dispute again and chargeback
         engine.process_transaction(dispute).unwrap();
@@ -214,17 +229,23 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 0.0);
-        assert_eq!(account.held, 0.0);
-        assert_eq!(account.total, 0.0);
+        assert_eq!(account.available, dec!(0.0));
+        assert_eq!(account.held, dec!(0.0));
+        assert_eq!(account.total, dec!(0.0));
         assert!(account.locked);
     }
 
     #[test]
     fn test_withdrawal_insufficient_funds() {
         let mut engine = PaymentEngine::new();
-        let deposit = Transaction::new(1, 1, TransactionType::Deposit { amount: 50.0 });
-        let withdrawal = Transaction::new(1, 2, TransactionType::Withdrawal { amount: 100.0 });
+        let deposit = Transaction::new(1, 1, TransactionType::Deposit { amount: dec!(50.0) });
+        let withdrawal = Transaction::new(
+            1,
+            2,
+            TransactionType::Withdrawal {
+                amount: dec!(100.0),
+            },
+        );
 
         engine.process_transaction(deposit).unwrap();
         let result = engine.process_transaction(withdrawal);
@@ -234,16 +255,22 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 50.0);
-        assert_eq!(account.total, 50.0);
+        assert_eq!(account.available, dec!(50.0));
+        assert_eq!(account.total, dec!(50.0));
     }
 
     #[test]
     fn test_multiple_disputes_and_resolves() {
         let mut engine = PaymentEngine::new();
-        let deposit1 = Transaction::new(1, 1, TransactionType::Deposit { amount: 100.0 });
-        let deposit2 = Transaction::new(1, 2, TransactionType::Deposit { amount: 50.0 });
-        let withdrawal = Transaction::new(1, 3, TransactionType::Withdrawal { amount: 30.0 });
+        let deposit1 = Transaction::new(
+            1,
+            1,
+            TransactionType::Deposit {
+                amount: dec!(100.0),
+            },
+        );
+        let deposit2 = Transaction::new(1, 2, TransactionType::Deposit { amount: dec!(50.0) });
+        let withdrawal = Transaction::new(1, 3, TransactionType::Withdrawal { amount: dec!(30.0) });
 
         engine.process_transaction(deposit1).unwrap();
         engine.process_transaction(deposit2).unwrap();
@@ -257,8 +284,8 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 20.0); // 100+50-30-100(disputed)
-        assert_eq!(account.held, 100.0);
+        assert_eq!(account.available, dec!(20.0)); // 100+50-30-100(disputed)
+        assert_eq!(account.held, dec!(100.0));
         assert_eq!(account.total, account.held + account.available);
 
         // Dispute deposit2
@@ -269,8 +296,8 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, -30.0); // 20-50(disputed)
-        assert_eq!(account.held, 150.0);
+        assert_eq!(account.available, dec!(-30.0)); // 20-50(disputed)
+        assert_eq!(account.held, dec!(150.0));
         assert_eq!(account.total, account.held + account.available);
 
         // Resolve deposit1
@@ -281,8 +308,8 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 70.0); // -30+100(resolved)
-        assert_eq!(account.held, 50.0);
+        assert_eq!(account.available, dec!(70.0)); // -30+100(resolved)
+        assert_eq!(account.held, dec!(50.0));
         assert_eq!(account.total, account.held + account.available);
 
         // Chargeback deposit2
@@ -293,17 +320,23 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 1)
             .unwrap();
-        assert_eq!(account.available, 70.0);
-        assert_eq!(account.held, 0.0);
-        assert_eq!(account.total, 70.0);
+        assert_eq!(account.available, dec!(70.0));
+        assert_eq!(account.held, dec!(0.0));
+        assert_eq!(account.total, dec!(70.0));
         assert!(account.locked);
     }
 
     #[test]
     fn test_dispute_withdrawal_and_chargeback() {
         let mut engine = PaymentEngine::new();
-        let deposit = Transaction::new(2, 1, TransactionType::Deposit { amount: 200.0 });
-        let withdrawal = Transaction::new(2, 2, TransactionType::Withdrawal { amount: 50.0 });
+        let deposit = Transaction::new(
+            2,
+            1,
+            TransactionType::Deposit {
+                amount: dec!(200.0),
+            },
+        );
+        let withdrawal = Transaction::new(2, 2, TransactionType::Withdrawal { amount: dec!(50.0) });
 
         engine.process_transaction(deposit).unwrap();
         engine.process_transaction(withdrawal).unwrap();
@@ -316,8 +349,8 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 2)
             .unwrap();
-        assert_eq!(account.available, 200.0); // 200-50+50(held)
-        assert_eq!(account.held, -50.0); // held is negative for withdrawal dispute
+        assert_eq!(account.available, dec!(200.0)); // 200-50+50(held)
+        assert_eq!(account.held, dec!(-50.0)); // held is negative for withdrawal dispute
         assert_eq!(account.total, account.held + account.available);
 
         // Chargeback withdrawal
@@ -328,17 +361,29 @@ mod tests {
             .into_iter()
             .find(|a| a.client == 2)
             .unwrap();
-        assert_eq!(account.available, 200.0);
-        assert_eq!(account.held, 0.0);
-        assert_eq!(account.total, 200.0);
+        assert_eq!(account.available, dec!(200.0));
+        assert_eq!(account.held, dec!(0.0));
+        assert_eq!(account.total, dec!(200.0));
         assert!(account.locked);
     }
 
     #[test]
     fn test_negative_deposit_and_withdrawal() {
         let mut engine = PaymentEngine::new();
-        let deposit = Transaction::new(1, 1, TransactionType::Deposit { amount: -10.0 });
-        let withdrawal = Transaction::new(1, 2, TransactionType::Withdrawal { amount: -20.0 });
+        let deposit = Transaction::new(
+            1,
+            1,
+            TransactionType::Deposit {
+                amount: dec!(-10.0),
+            },
+        );
+        let withdrawal = Transaction::new(
+            1,
+            2,
+            TransactionType::Withdrawal {
+                amount: dec!(-20.0),
+            },
+        );
 
         let result_deposit = engine.process_transaction(deposit);
         assert!(matches!(
@@ -368,13 +413,19 @@ mod tests {
             panic!("account should exist")
         };
 
-        assert_eq!(account.available, 0.0);
+        assert_eq!(account.available, dec!(0.0));
     }
 
     #[test]
     fn test_dispute_for_different_client() {
         let mut engine = PaymentEngine::new();
-        let deposit = Transaction::new(1, 1, TransactionType::Deposit { amount: 100.0 });
+        let deposit = Transaction::new(
+            1,
+            1,
+            TransactionType::Deposit {
+                amount: dec!(100.0),
+            },
+        );
         engine.process_transaction(deposit).unwrap();
 
         let dispute = Transaction::new(2, 1, TransactionType::Dispute);

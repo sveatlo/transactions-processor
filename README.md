@@ -8,8 +8,7 @@ A simple toy payments engine that processes financial transactions from CSV file
 - **Account Management**: Tracks available, held, and total funds for each client
 - **Dispute Handling**: Supports the full dispute lifecycle from dispute to resolution or chargeback
 - **Safety**: Prevents insufficient fund withdrawals and locks accounts after chargebacks
-- **Precision**: Uses `f64` for financial calculations
-- **Streaming**: Processes CSV files line by line for memory efficiency with large datasets
+- **Precision**: Uses [`rust_decimal::Decimal`](https://docs.rs/rust_decimal/latest/rust_decimal/struct.Decimal.html) for financial calculations
 - **Error Handling**: Robust error handling with detailed error types
 
 ## Usage

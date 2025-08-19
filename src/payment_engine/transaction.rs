@@ -1,3 +1,5 @@
+use rust_decimal::Decimal;
+
 #[derive(Debug, Clone)]
 pub struct Transaction {
     pub client: u16,
@@ -8,8 +10,8 @@ pub struct Transaction {
 
 #[derive(Debug, Clone)]
 pub enum TransactionType {
-    Deposit { amount: f64 },
-    Withdrawal { amount: f64 },
+    Deposit { amount: Decimal },
+    Withdrawal { amount: Decimal },
     Dispute,
     Resolve,
     Chargeback,
